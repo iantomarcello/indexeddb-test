@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="en" dir="ltr">
+  <head>
+    <meta charset="utf-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=yes">
+    <title>Testing out vanilla IndexedDB</title>
+    <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css" integrity="sha384-JcKb8q3iqJ61gNV9KGb8thSsNjpSL0n8PARn9HuZOnIxN0hoP+VmmDGMN5t9UJ0Z" crossorigin="anonymous">
+    <style>
+      tbody {
+        counter-reset: counter;
+      }
+
+      tbody tr td:first-child::before {
+        content: counter(counter);
+        counter-increment: counter;
+      }
+    </style>
+  </head>
+  <body class="bg-light vh-100">
+    <main class="container bg-white p-5 shadow-sm rounded h-100">
+      <div class="d-flex h-100 flex-column">
+        <hgroup>
+          <h1 class="text-center">Testing out vanilla IndexedDB</h1>
+          <h2 class="text-center" style="font-size: 1.1rem">basically a to-do list</h2>
+          <p class="text-center" style="font-size: 0.7rem"><a href="idb.html">Link to another version using a library</a></p>
+        </hgroup>
+        <div class="mt-3">
+          <p><strong>DB data should be listed here</strong></p>
+          <table class="table overflow-auto">
+            <thead>
+              <tr>
+                <th>#</th>
+                <th>Task</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>
+                  <small>Got nothing here</small>
+                </td>
+              </tr>
+            </tbody>
+            <template id="table-row-template">
+              <tr>
+                <td><!-- {{index}} --></td>
+                <td class="d-flex align-items-center py-2">
+                  <input type="text" value="{{Task}}" class="border-0 w-100 mr-3" style="height: 35px;" onchange="updateDatum(event)">
+                  <button type="button" name="button" class="btn btn-danger" onclick="removeDatum(event)">Delete</button>
+                </td>
+              </tr>
+            </template>
+          </table>
+        </div>
+        <div class="mt-auto">
+          <p><strong>Input goes here</strong></p>
+          <form class="row">
+            <div class="form-group col-12 col-sm-9">
+              <input type="text" class="form-control" name="task" placeholder="Task" required>
+            </div>
+            <div class="col-12 col-sm-3">
+              <button type="submit" class="btn btn-primary w-100">Submit</button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </main>
+
+    <script>
+
+      let request = indexedDB.open('derList', 1);
+      request.onerror = ev => console.error(ev.target.errorCode);
+      let db;
+
+      request.onsuccess = ev => {
+        db = request.result;
+
+        if ( db.objectStoreNames.length ) {
+          printTable();
+        }
+      }
+
+      request.onupgradeneeded = ev => {
+        let db = event.target.result;
+        let objectStore = db.createObjectStore('list', { autoIncrement : true });
+      }
+
+      document.forms[0].addEventListener('submit', ev => {
+        ev.preventDefault();
+        db.transaction(['list'], 'readwrite')
+          .objectStore('list').add({ task: ev.target.task.value.trim() })
+          .onsuccess = evt => {
+            console.log('value added');
+            printTable();
+            ev.target.reset();
+          };
+      });
+
+      const printTable = () => {
+        let table = document.querySelector('tbody');
+        while ( table.lastElementChild ) table.lastElementChild.remove();
+        db.transaction(['list'], 'readonly')
+          .objectStore('list')
+          .openCursor()
+          .onsuccess = evt => {
+            let cursor = evt.target.result;
+            if ( cursor ) {
+              let clone = document.getElementById('table-row-template').content.cloneNode(true);
+              clone.querySelector('tr').id = cursor.key;
+              let tds = clone.querySelectorAll('td');
+              tds[1].querySelector('input').value = cursor.value.task;
+              table.appendChild(clone);
+              cursor.continue();
+            }
+          }
+        ;
+      }
+
+      const removeDatum = (ev) => {
+        let id = parseInt(ev.currentTarget.closest('tr').id);
+        db.transaction(['list'], 'readwrite')
+          .objectStore('list')
+          .delete(id)
+          .onsuccess = evt => {
+            console.log('value deleted');
+            printTable();
+          }
+      }
+
+      const updateDatum = (ev) => {
+        let id = parseInt(ev.currentTarget.closest('tr').id);
+        let task = ev.currentTarget.value;
+
+        let objectStore = db.transaction(['list'], 'readwrite').objectStore('list');
+        let request = objectStore.get(id);
+
+        request.onsuccess = evt => {
+          let data = request.result;
+          data.task = task;
+          let requestUpdate = objectStore.put(data, id);
+          requestUpdate.onerror = event => console.log(event);
+          requestUpdate.onsuccess = event => {
+            console.log('value updated');
+            printTable();
+          };
+        }
+      }
+
+    </script>
+  </body>
+</html>
